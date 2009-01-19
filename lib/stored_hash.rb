@@ -20,12 +20,14 @@ class StoredHash
     @mutex = Mutex.new
   end
 
-  def to_yaml
-    method_missing(:to_yaml)
+  def == other
+    super or @data == other
   end
 
-  def inspect
-    method_missing(:inspect)
+  [:to_yaml, :inspect, :eql?, :hash].each do |name|
+    define_method(name) do |*args|
+      method_missing(name, *args)
+    end
   end
 
   [:dup, :clone].each do |name|
@@ -47,7 +49,7 @@ class StoredHash
   def method_missing(*args, &blk)
     synchronize do |file|
       update file if should_update? file
-      @old_data ||= @data.deep_clone
+      @old_data ||= duplicate_data
       result = @data.send(*args, &blk)
       write if should_write?
       return self if result == @data
@@ -59,6 +61,10 @@ class StoredHash
     @data.dup
   end
 
+  def is_a? whatever
+    super whatever or @data.is_a? whatever
+  end
+
   private
 
   def should_update? file
@@ -68,7 +74,11 @@ class StoredHash
   def update file
     @data.replace YAML.load(file.read)
     @mtime    = file.mtime
-    @old_data = @data.deep_clone
+    @old_data = duplicate_data
+  end
+
+  def duplicate_data
+    @data.respond_to?(:deep_clone) ? @data.deep_clone : @data.dup
   end
 
   def should_write?
@@ -85,7 +95,7 @@ class StoredHash
     end
     File.open(@file, "w") { |f| f.write(yaml) }
     @mtime = File.mtime(@file)
-    @old_data = @data.deep_clone
+    @old_data = duplicate_data
   end
 
   # Not only do we want to synchronize threads, but processes, too.
