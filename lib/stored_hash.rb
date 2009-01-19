@@ -46,7 +46,7 @@ class StoredHash
   # has been changed and if so, we write it to the file.
   def method_missing(*args, &blk)
     synchronize do |file|
-      update if should_update?
+      update file if should_update? file
       @old_data ||= @data.deep_clone
       result = @data.send(*args, &blk)
       write if should_write?
@@ -61,11 +61,11 @@ class StoredHash
 
   private
 
-  def should_update?
+  def should_update? file
     not @mtime or file.mtime >= @mtime
   end
 
-  def update
+  def update file
     @data.replace YAML.load(file.read)
     @mtime    = file.mtime
     @old_data = @data.deep_clone
