@@ -6,9 +6,24 @@ require 'fileutils'
 describe StoredHash do
 
   before :each do
-    @max_count   = 30
+
     @stored_hash = StoredHash.new "/tmp/test#{Time.now.to_i}.yml"
     @some_hashes = [ {}, {0 => 1, 2 => 3, 4 => 5}, {"foo" => [{:bar => "blah"}]} ]
+
+
+    def test_parallel run_block, wait_block
+      pt_count   = 4
+      max_count  = 30
+      loop_block = lambda do |pt|
+        max_count.times { |i| @stored_hash["#{pt}-#{i}"] = 0 }
+      end
+      list = (1..pt_count).collect do |i|
+        run_block.call i, loop_block
+      end
+      wait_block[list]
+      @stored_hash.size.should == pt_count * max_count
+    end
+
     def with_some_hash
       @some_hashes.each do |a_hash|
         @stored_hash.replace a_hash
@@ -16,9 +31,7 @@ describe StoredHash do
         @stored_hash.replace Hash.new
       end
     end
-    def add_elements(number, prefix = nil)
-      number.times { |i| @stored_hash[[prefix, i].compact.join "-"] = 0 }
-    end
+    
   end
 
   after :each do
@@ -91,20 +104,17 @@ describe StoredHash do
   end
 
   it "should be thread safe" do
-    thread_number = 5
-    threads       = []
-    thread_number.times do |tnum|
-      threads << Thread.new(tnum) { |t| add_elements(@max_count, t) }
-    end
-    threads.each { |t| t.join }
-    @stored_hash.size.should == (thread_number * @max_count)
+    test_parallel(
+      lambda { |n, b| Thread.new(n, &b) },
+      lambda { |threads| threads.each { |t| t.join } }
+    )
   end
 
   it "should be process safe" do
-    fork { add_elements @max_count, "fork"; exit }
-    add_elements @max_count
-    Process.wait
-    @stored_hash.size.should == (2 * @max_count)
+    test_parallel(
+      lambda { |n, b| fork { b[n]; exit } },
+      Proc.new { Process.waitall }
+    )
   end
 
 end
