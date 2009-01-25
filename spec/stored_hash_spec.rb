@@ -6,14 +6,9 @@ require 'fileutils'
 describe StoredHash do
 
   def test_parallel run_block, wait_block
-    pt_count   = 4
-    max_count  = 30
-    loop_block = lambda do |pt|
-      max_count.times { |i| @stored_hash["#{pt}-#{i}"] = 0 }
-    end
-    list = (1..pt_count).collect do |i|
-      run_block.call i, loop_block
-    end
+    pt_count, max_count  = 4, 30
+    loop_block = lambda { |pt| max_count.times { |i| @stored_hash["#{pt}-#{i}"] = 0 } }
+    list = (1..pt_count).collect { |i| run_block[i, loop_block] }
     wait_block[list]
     @stored_hash.size.should == pt_count * max_count
   end
