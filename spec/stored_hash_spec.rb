@@ -6,6 +6,7 @@ require 'fileutils'
 describe StoredHash do
 
   before :each do
+    @max_count   = 30
     @stored_hash = StoredHash.new "/tmp/test#{Time.now.to_i}.yml"
     @some_hashes = [ {}, {0 => 1, 2 => 3, 4 => 5}, {"foo" => [{:bar => "blah"}]} ]
     def with_some_hash
@@ -14,6 +15,9 @@ describe StoredHash do
         yield a_hash
         @stored_hash.replace Hash.new
       end
+    end
+    def add_elements(number, prefix = nil)
+      number.times { |i| @stored_hash[[prefix, i].compact.join "-"] = 0 }
     end
   end
 
@@ -88,17 +92,19 @@ describe StoredHash do
 
   it "should be thread safe" do
     thread_number = 5
-    max_count     = 10
     threads       = []
     thread_number.times do |tnum|
-      threads << Thread.new(tnum) do |t|
-        max_count.times do |i|
-          @stored_hash["#{t} #{i}"] = 0
-        end
-      end
+      threads << Thread.new(tnum) { |t| add_elements(@max_count, t) }
     end
     threads.each { |t| t.join }
-    @stored_hash.size.should == (thread_number * max_count)
+    @stored_hash.size.should == (thread_number * @max_count)
+  end
+
+  it "should be process safe" do
+    fork { add_elements @max_count, "fork"; exit }
+    add_elements @max_count
+    Process.wait
+    @stored_hash.size.should == (2 * @max_count)
   end
 
 end
