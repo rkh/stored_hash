@@ -5,33 +5,35 @@ require 'fileutils'
 
 describe StoredHash do
 
-  before :each do
+  def test_parallel run_block, wait_block
+    pt_count   = 4
+    max_count  = 30
+    loop_block = lambda do |pt|
+      max_count.times { |i| @stored_hash["#{pt}-#{i}"] = 0 }
+    end
+    list = (1..pt_count).collect do |i|
+      run_block.call i, loop_block
+    end
+    wait_block[list]
+    @stored_hash.size.should == pt_count * max_count
+  end
 
-    @stored_hash = StoredHash.new "/tmp/test#{Time.now.to_i}.yml"
+  def with_some_hash
+    @some_hashes.each do |a_hash|
+      @stored_hash.replace a_hash
+      yield a_hash
+      @stored_hash.replace Hash.new
+    end
+  end
+
+  before :all do
     @some_hashes = [ {}, {0 => 1, 2 => 3, 4 => 5}, {"foo" => [{:bar => "blah"}]} ]
+  end
 
-
-    def test_parallel run_block, wait_block
-      pt_count   = 4
-      max_count  = 30
-      loop_block = lambda do |pt|
-        max_count.times { |i| @stored_hash["#{pt}-#{i}"] = 0 }
-      end
-      list = (1..pt_count).collect do |i|
-        run_block.call i, loop_block
-      end
-      wait_block[list]
-      @stored_hash.size.should == pt_count * max_count
-    end
-
-    def with_some_hash
-      @some_hashes.each do |a_hash|
-        @stored_hash.replace a_hash
-        yield a_hash
-        @stored_hash.replace Hash.new
-      end
-    end
-    
+  before :each do
+    file = "test#{Time.now.to_i}.yml"
+    sleep(0.1) while File.exists? file
+    @stored_hash = StoredHash.new file
   end
 
   after :each do
